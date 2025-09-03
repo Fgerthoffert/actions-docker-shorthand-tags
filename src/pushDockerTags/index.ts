@@ -13,7 +13,7 @@ export const pushDockerTags = async ({
   srcRegistry: Registry
   dstRegistry: Registry
   dryRun: boolean
-}): Promise<any> => {
+}): Promise<void> => {
   core.info(`Pushing shorthand tags, dry run: ${dryRun}`)
 
   let currentSrcRegistry = ''

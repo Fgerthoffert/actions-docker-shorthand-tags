@@ -1,8 +1,4 @@
-export const sortTags = (
-  tags: string[],
-  digitsCount: number,
-  snapshotSuffix: string = ''
-): string[] => {
+export const sortTags = (tags: string[], digitsCount: number): string[] => {
   // Sort tags in descending order by semantic version
   const getNumericParts = (tag: string, digitsCount: number) => {
     // Remove suffix (anything after first non-digit or dot)

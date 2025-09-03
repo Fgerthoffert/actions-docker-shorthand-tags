@@ -4,7 +4,7 @@ import { exit } from 'process'
 
 import type { Registry } from '../types/index.js'
 
-export const dockerLogin = async (registry: Registry): Promise<any> => {
+export const dockerLogin = async (registry: Registry): Promise<void> => {
   core.info(
     `Attempting to authentication to registry: ${registry.registry === '' ? 'Docker Hub' : registry.registry}`
   )

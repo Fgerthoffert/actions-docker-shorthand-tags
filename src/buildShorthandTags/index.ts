@@ -25,7 +25,7 @@ export const buildShortHandtags = ({
   // Splitting the logic in two, once for release, and one for snapshot
 
   const tagsCandidates = cleanupTags(tags, digitsCount, suffix)
-  const tagsCandidatesSorted = sortTags(tagsCandidates, digitsCount, suffix)
+  const tagsCandidatesSorted = sortTags(tagsCandidates, digitsCount)
   const shorthandTags = generateShorthandTags(
     tagsCandidatesSorted,
     digitsCount,

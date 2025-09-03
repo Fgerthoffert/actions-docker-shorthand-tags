@@ -22,12 +22,15 @@ export const getDockerTags = async ({
       }
     })
 
-    const tags = (await response.clone().json()) as any
+    const tags = (await response.clone().json()) as { tags: string[] }
     return tags.tags
-  } catch (error) {
-    console.log(error)
-    core.error(`Error fetching Docker Hub token: ${(error as Error).message}`)
-    return undefined
+  } catch (error: unknown) {
+    let errorMessage = 'Unknown error occurred while fetching package details'
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      errorMessage = String((error as { message?: unknown }).message)
+    }
+    core.setFailed(`Failed to fetch package: ${errorMessage}`)
+    process.exit(1)
   }
 }
 

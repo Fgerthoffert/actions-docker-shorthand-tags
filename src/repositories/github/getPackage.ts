@@ -34,9 +34,11 @@ export const getPackage = async ({
     )
 
     return response.data as unknown as GitHubPackage
-  } catch (error: any) {
-    const errorMessage =
-      error?.message || 'Unknown error occurred while fetching package details'
+  } catch (error: unknown) {
+    let errorMessage = 'Unknown error occurred while fetching package details'
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      errorMessage = String((error as { message?: unknown }).message)
+    }
     core.setFailed(`Failed to fetch package: ${errorMessage}`)
     process.exit(1)
   }

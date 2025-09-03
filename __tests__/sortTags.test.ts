@@ -16,7 +16,7 @@ describe('sortTags', () => {
 
   it('sorts tags with snapshot suffix correctly', () => {
     const tags = ['1.2.3-SNAPSHOT', '2.0.0-SNAPSHOT', '1.10.0-SNAPSHOT']
-    const result = sortTags([...tags], 3, '-SNAPSHOT')
+    const result = sortTags([...tags], 3)
     expect(result).toEqual([
       '2.0.0-SNAPSHOT',
       '1.10.0-SNAPSHOT',

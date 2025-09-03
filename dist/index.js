@@ -32431,7 +32431,10 @@ const getPackage = async ({ inputGithubToken, ownerLogin, packageType, packageNa
         return response.data;
     }
     catch (error) {
-        const errorMessage = error?.message || 'Unknown error occurred while fetching package details';
+        let errorMessage = 'Unknown error occurred while fetching package details';
+        if (typeof error === 'object' && error !== null && 'message' in error) {
+            errorMessage = String(error.message);
+        }
         coreExports.setFailed(`Failed to fetch package: ${errorMessage}`);
         process.exit(1);
     }
@@ -33633,14 +33636,16 @@ function normalizePaginatedListResponse(response) {
       data: []
     };
   }
-  const responseNeedsNormalization = "total_count" in response.data && !("url" in response.data);
+  const responseNeedsNormalization = ("total_count" in response.data || "total_commits" in response.data) && !("url" in response.data);
   if (!responseNeedsNormalization) return response;
   const incompleteResults = response.data.incomplete_results;
   const repositorySelection = response.data.repository_selection;
   const totalCount = response.data.total_count;
+  const totalCommits = response.data.total_commits;
   delete response.data.incomplete_results;
   delete response.data.repository_selection;
   delete response.data.total_count;
+  delete response.data.total_commits;
   const namespaceKey = Object.keys(response.data)[0];
   const data = response.data[namespaceKey];
   response.data = data;
@@ -33651,6 +33656,7 @@ function normalizePaginatedListResponse(response) {
     response.data.repository_selection = repositorySelection;
   }
   response.data.total_count = totalCount;
+  response.data.total_commits = totalCommits;
   return response;
 }
 
@@ -33671,6 +33677,16 @@ function iterator(octokit, route, parameters) {
           url = ((normalizedResponse.headers.link || "").match(
             /<([^<>]+)>;\s*rel="next"/
           ) || [])[1];
+          if (!url && "total_commits" in normalizedResponse.data) {
+            const parsedUrl = new URL(normalizedResponse.url);
+            const params = parsedUrl.searchParams;
+            const page = parseInt(params.get("page") || "1", 10);
+            const per_page = parseInt(params.get("per_page") || "250", 10);
+            if (page * per_page < normalizedResponse.data.total_commits) {
+              params.set("page", String(page + 1));
+              url = parsedUrl.toString();
+            }
+          }
           return { value: normalizedResponse };
         } catch (error) {
           if (error.status !== 409) throw error;
@@ -33754,7 +33770,10 @@ const getPackageVersions = async ({ inputGithubToken, ownerLogin, packageType, p
         return packages;
     }
     catch (error) {
-        const errorMessage = error?.message || 'Unknown error occurred while fetching package details';
+        let errorMessage = 'Unknown error occurred while fetching package details';
+        if (typeof error === 'object' && error !== null && 'message' in error) {
+            errorMessage = String(error.message);
+        }
         coreExports.setFailed(`Failed to fetch package: ${errorMessage}`);
         process.exit(1);
     }
@@ -33855,9 +33874,12 @@ const getDockerTags = async ({ dockerHubAuth, dockerHubRepository }) => {
         return tags.tags;
     }
     catch (error) {
-        console.log(error);
-        coreExports.error(`Error fetching Docker Hub token: ${error.message}`);
-        return undefined;
+        let errorMessage = 'Unknown error occurred while fetching package details';
+        if (typeof error === 'object' && error !== null && 'message' in error) {
+            errorMessage = String(error.message);
+        }
+        coreExports.setFailed(`Failed to fetch package: ${errorMessage}`);
+        process.exit(1);
     }
 };
 
@@ -33942,7 +33964,7 @@ const cleanupTags = (tags, digitsCount, snapshotSuffix = '') => {
     });
 };
 
-const sortTags = (tags, digitsCount, snapshotSuffix = '') => {
+const sortTags = (tags, digitsCount) => {
     // Sort tags in descending order by semantic version
     const getNumericParts = (tag, digitsCount) => {
         // Remove suffix (anything after first non-digit or dot)
@@ -34004,7 +34026,7 @@ const buildShortHandtags = ({ tags, digitsCount, suffix }) => {
     // Start by cleanup all the tags and removing all of the tags not candidates for shorthands
     // Splitting the logic in two, once for release, and one for snapshot
     const tagsCandidates = cleanupTags(tags, digitsCount, suffix);
-    const tagsCandidatesSorted = sortTags(tagsCandidates, digitsCount, suffix);
+    const tagsCandidatesSorted = sortTags(tagsCandidates, digitsCount);
     const shorthandTags = generateShorthandTags(tagsCandidatesSorted, digitsCount, suffix);
     console.log('Matching tags:', tagsCandidates);
     console.log('Matching tags (sorted DESC):', tagsCandidatesSorted);
@@ -34074,6 +34096,21 @@ const dockerLogin = async (registry) => {
     }
 };
 
+/**
+ * Creates and pushes a Docker tag named "latest" based on a provided shorthand tag.
+ *
+ * This function uses Docker Buildx imagetools to create a new "latest" tag in the destination registry,
+ * using the image from the source registry and the specified shorthand tag as the base.
+ *
+ * If `dryRun` is true, the function will only log the Docker command that would be executed, without performing any actions.
+ *
+ * @param shorthandTag - The shorthand tag information used as the base for the new "latest" tag.
+ * @param srcRegistry - The source registry containing the original image.
+ * @param dstRegistry - The destination registry where the "latest" tag will be pushed.
+ * @param dryRun - If true, only logs the intended Docker command without executing it.
+ *
+ * @returns void
+ */
 const createLatestDockerTag = async ({ shorthandTag, srcRegistry, dstRegistry, dryRun }) => {
     coreExports.info(`Pushing latest tags, using ${shorthandTag.tag} as base, dry run: ${dryRun}`);
     console.log(shorthandTag);
