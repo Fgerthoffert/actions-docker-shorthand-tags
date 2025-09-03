@@ -38,13 +38,11 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "@octokit/plugin-paginate-graphql": "^5.2.4",
-    "date-fns": "^4.1.0",
     "flat-cache": "^6.1.8"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.8",
-    "@github/local-action": "^3.1.4",
+    "@github/local-action": "^5.1.0",
     "@jest/globals": "^29.7.0",
     "@rollup/plugin-commonjs": "^28.0.1",
     "@rollup/plugin-node-resolve": "^16.0.1",
