@@ -1,8 +1,9 @@
 import * as core from '@actions/core'
-import * as github from '@actions/github'
 
 import fetchExistingTagsFromGitHub from './repositories/github/index.js'
 import fetchExistingTagsFromDockerHub from './repositories/dockerhub/index.js'
+
+import buildShortHandtags from './utils/buildShorthandTags.js'
 
 /**
  * The main function for the action.
@@ -54,8 +55,20 @@ export async function run(): Promise<void> {
     //    In some cases, we might want to generate shorthands for snapshot versions as well, in such a case, the system will generate
     //    shorthand tags for these. For example, if version_digits_count = 3 and snapshot_suffix = "-SNAPSHOT". The system will generate shorthand
     //    tags for all tags being EXACTLY 3 digits AND followed by the snapshot suffix.
+    // In this method we're only creating an array of shorthand tags, this array is composed of objects {tag: string, shorthand: string}
+
     const inputVersionDigitsCount = core.getInput('version_digits_count')
     const inputSnapshotSuffix = core.getInput('snapshot_suffix')
+
+    const shorthandTags = buildShortHandtags({
+      tags: imageTags,
+      digitsCount: Number(inputVersionDigitsCount),
+      snapshotSuffix: inputSnapshotSuffix
+    })
+
+    core.info(
+      `The following tags are needed: ${shorthandTags.map((tag) => tag.shorthand).join(', ')}`
+    )
 
     core.info(`Successfully executed the action`)
   } catch (error) {

@@ -1,9 +1,8 @@
 import * as core from '@actions/core'
-import * as github from '@actions/github'
 import { Octokit } from '@octokit/core'
 import { paginateRest } from '@octokit/plugin-paginate-rest'
 
-import { GitHubPackage, GitHubPackageVersion } from '../../types/index.js'
+import { GitHubPackageVersion } from '../../types/index.js'
 
 export const getPackageVersions = async ({
   inputGithubToken,

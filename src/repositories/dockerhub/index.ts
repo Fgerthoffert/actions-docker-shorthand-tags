@@ -2,7 +2,7 @@ import * as core from '@actions/core'
 import { FlatCache } from 'flat-cache'
 
 import { getCacheDirectory } from '../getCacheDirectory.js'
-import { DockerHubAuth } from '../types/index.js'
+import { DockerHubAuth } from '../../types/index.js'
 
 import { getDockerHubToken } from './getDockerHubToken.js'
 import { getDockerTags } from './getDockerTags.js'
@@ -47,21 +47,25 @@ export const fetchExistingTags = async ({
       authorization: Buffer.from(
         `${inputDockerHubUsername}:${inputDockerHubPassword}`
       ).toString('base64'),
-      token: ''
+      token: {
+        token: '',
+        expires_in: 0,
+        issued_at: ''
+      }
     }
 
     const token = await getDockerHubToken({
       dockerHubAuth
     })
 
-    dockerHubAuth = {
-      ...dockerHubAuth,
-      token
-    }
-
     if (!token) {
       core.setFailed('Failed to retrieve DockerHub token.')
       throw new Error('DockerHub token is undefined.')
+    }
+
+    dockerHubAuth = {
+      ...dockerHubAuth,
+      token
     }
 
     const fetchedTags = await getDockerTags({
