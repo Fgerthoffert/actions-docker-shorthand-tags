@@ -3,7 +3,13 @@ import * as core from '@actions/core'
 import fetchExistingTagsFromGitHub from './repositories/github/index.js'
 import fetchExistingTagsFromDockerHub from './repositories/dockerhub/index.js'
 
-import buildShortHandtags from './utils/buildShorthandTags.js'
+import buildShortHandtags from './buildShorthandTags/index.js'
+
+import pushDockerTags from './pushDockerTags/index.js'
+import { dockerLogin } from './pushDockerTags/dockerLogin.js'
+import { createLatestDockerTag } from './pushDockerTags/createLatestDockerTag.js'
+
+import type { Registry } from './types/index.js'
 
 /**
  * The main function for the action.
@@ -13,62 +19,111 @@ import buildShortHandtags from './utils/buildShorthandTags.js'
 export async function run(): Promise<void> {
   try {
     const inputDevCache = core.getInput('dev_cache') === 'true'
-    const inputPackageRegistry = core.getInput('package_registry')
-    const inputPackageFullname = core.getInput('package_fullname')
+    const inputVersionDigitsCount = core.getInput('version_digits_count')
+    const inputSnapshotSuffix = core.getInput('snapshot_suffix')
+    const inputDryRun = core.getInput('dry_run') === 'true'
+    const inputCreateLatest = core.getInput('create_latest') === 'true'
+
+    // Create two registry objects for source and destination
+    const srcRegistry: Registry = {
+      registry: core.getInput('src_registry'),
+      repository: core.getInput('src_repository'),
+      username: core.getInput('src_username'),
+      secret: core.getInput('src_secret')
+    }
+
+    const dstRegistry: Registry = {
+      registry: core.getInput('dst_registry'),
+      repository: core.getInput('dst_repository'),
+      username: core.getInput('dst_username'),
+      secret: core.getInput('dst_secret')
+    }
 
     // Fetch a list of tags from a source registry
     let imageTags: string[] = []
-    if (inputPackageRegistry === 'github') {
-      const inputGithubToken = core.getInput('token')
+    if (srcRegistry.registry === 'github') {
       imageTags = await fetchExistingTagsFromGitHub({
         inputDevCache,
-        inputGithubToken,
-        inputPackageFullname
+        inputGithubToken: srcRegistry.secret,
+        inputSrcRepository: srcRegistry.repository
       })
-    } else if (inputPackageRegistry === 'dockerhub') {
-      const inputDockerHubUsername = core.getInput('dockerhub_username')
-      const inputDockerHubPassword = core.getInput('dockerhub_password')
-
+    } else if (srcRegistry.registry === 'dockerhub') {
       imageTags = await fetchExistingTagsFromDockerHub({
         inputDevCache,
-        inputDockerHubUsername,
-        inputDockerHubPassword,
-        inputPackageFullname
+        inputDockerHubUsername: srcRegistry.username,
+        inputDockerHubPassword: srcRegistry.secret,
+        inputSrcRepository: srcRegistry.repository
       })
     } else {
       core.setFailed(
-        `Package registry ${inputPackageRegistry} is unsupported, only "github" and "dockerhub" are currently supported`
+        `Package registry ${srcRegistry.registry} is unsupported, only "github" and "dockerhub" are currently supported`
       )
     }
 
     core.info(
-      `The container tags for package ${inputPackageFullname} are: ${imageTags.join(', ')}`
+      `The container tags for package ${srcRegistry.repository} are: ${imageTags.join(', ')}`
     )
 
-    // Determine what shorthand tags to generate
-    // Two important parameters are used here:
-    // - version_digits_count: Indicate the number of digits in traditional release version,
-    //    this helps determine when an alias should be generated. For example if the value is 3,
-    //    if the system sees a tag 1.2 it knows that it should be ignored. Shorthand tags will only be generated
-    //    for versions with 3 digits EXACTLY.
-    // - snapshot_suffix: Snapshot suffix
-    //    In some cases, we might want to generate shorthands for snapshot versions as well, in such a case, the system will generate
-    //    shorthand tags for these. For example, if version_digits_count = 3 and snapshot_suffix = "-SNAPSHOT". The system will generate shorthand
-    //    tags for all tags being EXACTLY 3 digits AND followed by the snapshot suffix.
-    // In this method we're only creating an array of shorthand tags, this array is composed of objects {tag: string, shorthand: string}
-
-    const inputVersionDigitsCount = core.getInput('version_digits_count')
-    const inputSnapshotSuffix = core.getInput('snapshot_suffix')
-
-    const shorthandTags = buildShortHandtags({
+    const shorthandTagsNoSuffix = buildShortHandtags({
       tags: imageTags,
       digitsCount: Number(inputVersionDigitsCount),
-      snapshotSuffix: inputSnapshotSuffix
+      suffix: ''
     })
 
-    core.info(
-      `The following tags are needed: ${shorthandTags.map((tag) => tag.shorthand).join(', ')}`
-    )
+    if (shorthandTagsNoSuffix.length === 0) {
+      core.notice(`No shorthand tags need to be created (without suffix)`)
+    } else {
+      core.notice(
+        `The following shorthand tags need to be created (without suffix): ${shorthandTagsNoSuffix.map((tag) => tag.shorthand).join(', ')}`
+      )
+    }
+
+    // Login to remote Docker registries
+    await dockerLogin(srcRegistry)
+    if (srcRegistry.registry !== dstRegistry.registry) {
+      // If dst registry is different from source, also login to the destination registry
+      await dockerLogin(dstRegistry)
+    }
+
+    await pushDockerTags({
+      shorthandTags: shorthandTagsNoSuffix,
+      srcRegistry,
+      dstRegistry,
+      dryRun: inputDryRun
+    })
+
+    // If configured, create "latest" tag matching the container
+    // with the highest digit
+    // Remember: shorthandTagsNoSuffix array is sorted by version DESC, so first is always latest
+    if (inputCreateLatest && shorthandTagsNoSuffix.length > 0) {
+      await createLatestDockerTag({
+        shorthandTag: shorthandTagsNoSuffix[0],
+        srcRegistry,
+        dstRegistry,
+        dryRun: inputDryRun
+      })
+    }
+
+    const shorthandTagsWithSuffix = buildShortHandtags({
+      tags: imageTags,
+      digitsCount: Number(inputVersionDigitsCount),
+      suffix: inputSnapshotSuffix
+    })
+
+    if (shorthandTagsWithSuffix.length === 0) {
+      core.notice(`No shorthand tags need to be created (without suffix)`)
+    } else {
+      core.notice(
+        `The following shorthand tags need to be created (without suffix): ${shorthandTagsWithSuffix.map((tag) => tag.shorthand).join(', ')}`
+      )
+    }
+
+    await pushDockerTags({
+      shorthandTags: shorthandTagsWithSuffix,
+      srcRegistry,
+      dstRegistry,
+      dryRun: inputDryRun
+    })
 
     core.info(`Successfully executed the action`)
   } catch (error) {

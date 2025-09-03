@@ -11,16 +11,14 @@ export const fetchExistingTags = async ({
   inputDevCache,
   inputDockerHubUsername,
   inputDockerHubPassword,
-  inputPackageFullname
+  inputSrcRepository
 }: {
   inputDevCache: boolean
   inputDockerHubUsername: string
   inputDockerHubPassword: string
-  inputPackageFullname: string
+  inputSrcRepository: string
 }): Promise<string[]> => {
-  core.info(
-    `Fetching all existing versions for package ${inputPackageFullname}`
-  )
+  core.info(`Fetching all existing versions for package ${inputSrcRepository}`)
 
   // The caching mechanism is there to avoid querying the Docker Hub API
   // during development and testing
@@ -41,7 +39,7 @@ export const fetchExistingTags = async ({
     let dockerHubAuth: DockerHubAuth = {
       domain: 'auth.docker.io',
       service: 'registry.docker.io',
-      scope: `repository:${inputPackageFullname}:pull`,
+      scope: `repository:${inputSrcRepository}:pull`,
       offlineToken: '1',
       clientId: 'shell',
       authorization: Buffer.from(
@@ -70,7 +68,7 @@ export const fetchExistingTags = async ({
 
     const fetchedTags = await getDockerTags({
       dockerHubAuth,
-      dockerHubRepository: inputPackageFullname
+      dockerHubRepository: inputSrcRepository
     })
     tags = fetchedTags ?? []
 

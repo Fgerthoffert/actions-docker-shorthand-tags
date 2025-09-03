@@ -9,15 +9,13 @@ import { getPackageVersions } from './getPackageVersions.js'
 export const fetchExistingTags = async ({
   inputDevCache,
   inputGithubToken,
-  inputPackageFullname
+  inputSrcRepository
 }: {
   inputDevCache: boolean
   inputGithubToken: string
-  inputPackageFullname: string
+  inputSrcRepository: string
 }): Promise<string[]> => {
-  core.info(
-    `Fetching all existing versions for package ${inputPackageFullname}`
-  )
+  core.info(`Fetching all existing versions for package ${inputSrcRepository}`)
 
   // The caching mechanism is there to avoid querying the Docker Hub API
   // during development and testing
@@ -34,9 +32,10 @@ export const fetchExistingTags = async ({
   if (inputDevCache === true && cacheData !== undefined) {
     core.info(`Github Packages tags were found in cache. Using cached data...`)
     tags = cacheData
+    return tags
   } else {
     // Split the package name into owner and repo
-    const [owner, packageName] = inputPackageFullname.split('/')
+    const [owner, packageName] = inputSrcRepository.split('/')
 
     // The packages GraphQL API is being deprecated, need to continue fetching with REST
     const githubPackage = await getPackage({
@@ -76,14 +75,15 @@ export const fetchExistingTags = async ({
       .flat()
 
     core.info(
-      `The container tags for package ${inputPackageFullname} are: ${tags.join(', ')}`
+      `The container tags for package ${inputSrcRepository} are: ${tags.join(', ')}`
     )
 
     // Saving the fetched tags to cache
     await cache.setKey('githubpackagestags', tags)
     await cache.save()
+
+    return tags
   }
-  return tags
 }
 
 export default fetchExistingTags

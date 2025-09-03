@@ -1,24 +1,75 @@
-name: The name of your action here
-description: Provide a description here
-author: Your name or organization here
+name: 'Docker Shorthand Tags'
+description:
+  'Generate shorthand tags from semver releases present in a Docker repository
+  repository (1.2.3 => 1 & 1.2)'
+author: 'fgerthoffert'
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: heart
-  color: red
+  icon: activity
+  color: green
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: Your input description here
+  src_registry:
+    description: 'Source Docker registry (e.g. dockerhub, github)'
     required: true
-    default: '1000'
+  src_repository:
+    description: 'Source Docker repository (e.g. user/repo)'
+    required: true
+  src_username:
+    description: 'Username to connect to the source registry'
+    required: true
+  src_secret:
+    description: 'Secret to connect to the source registry (password or token)'
+    required: true
 
-# Define your outputs here.
-outputs:
-  time:
-    description: Your output description here
+  dst_registry:
+    description: 'Destination Docker registry (e.g. dockerhub, github)'
+    required: true
+  dst_repository:
+    description: 'Destination Docker repository (e.g. user/repo)'
+    required: true
+  dst_username:
+    description: 'Username to connect to the destination registry'
+    required: true
+  dst_secret:
+    description:
+      'Secret to connect to the destination registry (password or token)'
+    required: true
+
+  dev_cache:
+    description:
+      'Enable development cache, this prevents the action from fetching data
+      from the source registry too frequently during development'
+    required: false
+    default: false
+  version_digits_count:
+    description:
+      'Number of version digits to include in the shorthand tags (for example 3
+      for 1.2.3 or 4 for 1.2.3.4)'
+    required: false
+    default: 3
+  snapshot_suffix:
+    description:
+      'Suffix for which shorthands should be created (for example 1-SNAPSHOT and
+      1.2-SNAPSHOT for 1.2.3-SNAPSHOT)'
+    required: false
+    default: -SNAPSHOT
+  dry_run:
+    description:
+      'Enable dry run mode, this prevents the action from making any changes to
+      the target registry during development. Will output the docker commands
+      instead of executing them'
+    required: false
+    default: true
+  create_latest:
+    description:
+      'Enable creation of latest tags (e.g. latest) for most recent (highest
+      digit) release pushed'
+    required: false
+    default: false
 
 runs:
-  using: node24
+  using: node20
   main: dist/index.js

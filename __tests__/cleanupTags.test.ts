@@ -1,9 +1,10 @@
 import { describe, it, expect } from '@jest/globals'
-import { cleanupTags } from '../src/utils/buildShorthandTags'
+
+import { cleanupTags } from '../src/buildShorthandTags/cleanupTags'
 
 describe('cleanupTags', () => {
   it('filters tags with exact digitsCount', () => {
-    const tags = ['1.2.3', '1.2', '1.2.3.4', '2.0.0']
+    const tags = ['1.2.3', '1.2', '1.2.3.4', '2.0.0', '2.1.0.1']
     expect(cleanupTags(tags, 3)).toEqual(['1.2.3', '2.0.0'])
   })
 
@@ -21,7 +22,7 @@ describe('cleanupTags', () => {
   })
 
   it('ignores tags with wrong digitsCount', () => {
-    const tags = ['1.2', '1.2.3', '1.2.3.4']
+    const tags = ['1.2', '1.2.3', '1.2.3.4', '1.2.4', '1.3.1-SNAPSHOT']
     expect(cleanupTags(tags, 2)).toEqual(['1.2'])
     expect(cleanupTags(tags, 4)).toEqual(['1.2.3.4'])
   })
