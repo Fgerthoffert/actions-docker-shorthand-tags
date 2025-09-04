@@ -15,9 +15,15 @@ export const buildShortHandtags = ({
   digitsCount: number
   suffix: string
 }): ShorthandTag[] => {
-  core.info(
-    `Generating shorthand tags for tags with a digit count of ${digitsCount} and potentially a suffix: ${suffix}`
-  )
+  if (suffix === '') {
+    core.info(
+      `Generating shorthand tags for tags with a digit count of ${digitsCount} (no suffix)`
+    )
+  } else {
+    core.info(
+      `Generating shorthand tags for tags with a digit count of ${digitsCount} (suffix: ${suffix})`
+    )
+  }
 
   console.log('All Tags:', tags)
 

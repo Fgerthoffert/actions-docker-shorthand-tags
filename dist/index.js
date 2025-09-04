@@ -32417,7 +32417,7 @@ function requireGithub () {
 var githubExports = requireGithub();
 
 const getPackage = async ({ inputGithubToken, ownerLogin, packageType, packageName }) => {
-    coreExports.info(`Fetching details about organization ${ownerLogin}, package type ${packageType}, package name ${packageName}`);
+    coreExports.info(`Fetching details about package ${packageName} in organization ${ownerLogin} (type: ${packageType})`);
     const octokit = githubExports.getOctokit(inputGithubToken);
     try {
         const response = await octokit.request('GET /orgs/{org}/packages/{package_type}/{package_name}', {
@@ -33752,7 +33752,7 @@ function paginateRest(octokit) {
 paginateRest.VERSION = VERSION;
 
 const getPackageVersions = async ({ inputGithubToken, ownerLogin, packageType, packageName }) => {
-    coreExports.info(`Fetching details about organization ${ownerLogin}, package type ${packageType}, package name ${packageName}`);
+    coreExports.info(`Fetching versions for package ${packageName}`);
     const MyOctokit = Octokit.plugin(paginateRest);
     const octokit = new MyOctokit({ auth: inputGithubToken });
     try {
@@ -34021,7 +34021,12 @@ const generateShorthandTags = (tags, digitsCount, snapshotSuffix = '') => {
 };
 
 const buildShortHandtags = ({ tags, digitsCount, suffix }) => {
-    coreExports.info(`Generating shorthand tags for tags with a digit count of ${digitsCount} and potentially a suffix: ${suffix}`);
+    if (suffix === '') {
+        coreExports.info(`Generating shorthand tags for tags with a digit count of ${digitsCount} (no suffix)`);
+    }
+    else {
+        coreExports.info(`Generating shorthand tags for tags with a digit count of ${digitsCount} (suffix: ${suffix})`);
+    }
     console.log('All Tags:', tags);
     // Start by cleanup all the tags and removing all of the tags not candidates for shorthands
     // Splitting the logic in two, once for release, and one for snapshot
@@ -34038,7 +34043,7 @@ const buildShortHandtags = ({ tags, digitsCount, suffix }) => {
 var execExports = requireExec();
 
 const pushDockerTags = async ({ shorthandTags, srcRegistry, dstRegistry, dryRun }) => {
-    coreExports.info(`Pushing shorthand tags, dry run: ${dryRun}`);
+    coreExports.info(`Pushing shorthand tags - dry run: ${dryRun}`);
     let currentSrcRegistry = '';
     if (srcRegistry.registry === 'github') {
         currentSrcRegistry = 'ghcr.io/';
@@ -34048,10 +34053,8 @@ const pushDockerTags = async ({ shorthandTags, srcRegistry, dstRegistry, dryRun 
         currentDstRegistry = 'ghcr.io/';
     }
     for (const tag of shorthandTags) {
-        if (dryRun) {
-            coreExports.info(`Dry run: Generate tag with docker buildx: docker buildx imagetools create --tag ${currentDstRegistry}${dstRegistry.repository}:${tag.shorthand} ${currentSrcRegistry}${srcRegistry.repository}:${tag.tag}`);
-        }
-        else {
+        coreExports.info(`${dryRun === false ? 'Executing command ' : '[DRY RUN] - Command skipped'}: docker buildx imagetools create --tag ${currentDstRegistry}${dstRegistry.repository}:${tag.shorthand} ${currentSrcRegistry}${srcRegistry.repository}:${tag.tag}`);
+        if (dryRun === false) {
             await execExports.exec('docker', [
                 'buildx',
                 'imagetools',
@@ -34191,10 +34194,10 @@ async function run() {
             suffix: ''
         });
         if (shorthandTagsNoSuffix.length === 0) {
-            coreExports.notice(`No shorthand tags need to be created (without suffix)`);
+            coreExports.notice(`No shorthand tags need to be created (no suffix)`);
         }
         else {
-            coreExports.notice(`The following shorthand tags need to be created (without suffix): ${shorthandTagsNoSuffix.map((tag) => tag.shorthand).join(', ')}`);
+            coreExports.notice(`The following shorthand tags need to be created (no suffix): ${shorthandTagsNoSuffix.map((tag) => tag.shorthand).join(', ')}`);
         }
         // Login to remote Docker registries
         await dockerLogin(srcRegistry);
@@ -34225,10 +34228,10 @@ async function run() {
             suffix: inputSnapshotSuffix
         });
         if (shorthandTagsWithSuffix.length === 0) {
-            coreExports.notice(`No shorthand tags need to be created (without suffix)`);
+            coreExports.notice(`No shorthand tags need to be created (suffix: ${inputSnapshotSuffix})`);
         }
         else {
-            coreExports.notice(`The following shorthand tags need to be created (without suffix): ${shorthandTagsWithSuffix.map((tag) => tag.shorthand).join(', ')}`);
+            coreExports.notice(`The following shorthand tags need to be created (suffix: ${inputSnapshotSuffix}): ${shorthandTagsWithSuffix.map((tag) => tag.shorthand).join(', ')}`);
         }
         await pushDockerTags({
             shorthandTags: shorthandTagsWithSuffix,
