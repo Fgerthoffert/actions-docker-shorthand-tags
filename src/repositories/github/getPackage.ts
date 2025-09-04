@@ -15,7 +15,7 @@ export const getPackage = async ({
   packageName: string
 }): Promise<GitHubPackage | undefined> => {
   core.info(
-    `Fetching details about organization ${ownerLogin}, package type ${packageType}, package name ${packageName}`
+    `Fetching details about package ${packageName} in organization ${ownerLogin} (type: ${packageType})`
   )
 
   const octokit = github.getOctokit(inputGithubToken)

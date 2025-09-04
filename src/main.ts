@@ -71,10 +71,10 @@ export async function run(): Promise<void> {
     })
 
     if (shorthandTagsNoSuffix.length === 0) {
-      core.notice(`No shorthand tags need to be created (without suffix)`)
+      core.notice(`No shorthand tags need to be created (no suffix)`)
     } else {
       core.notice(
-        `The following shorthand tags need to be created (without suffix): ${shorthandTagsNoSuffix.map((tag) => tag.shorthand).join(', ')}`
+        `The following shorthand tags need to be created (no suffix): ${shorthandTagsNoSuffix.map((tag) => tag.shorthand).join(', ')}`
       )
     }
 
@@ -111,10 +111,12 @@ export async function run(): Promise<void> {
     })
 
     if (shorthandTagsWithSuffix.length === 0) {
-      core.notice(`No shorthand tags need to be created (without suffix)`)
+      core.notice(
+        `No shorthand tags need to be created (suffix: ${inputSnapshotSuffix})`
+      )
     } else {
       core.notice(
-        `The following shorthand tags need to be created (without suffix): ${shorthandTagsWithSuffix.map((tag) => tag.shorthand).join(', ')}`
+        `The following shorthand tags need to be created (suffix: ${inputSnapshotSuffix}): ${shorthandTagsWithSuffix.map((tag) => tag.shorthand).join(', ')}`
       )
     }
 

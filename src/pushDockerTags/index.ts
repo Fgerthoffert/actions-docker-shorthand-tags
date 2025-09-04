@@ -14,7 +14,7 @@ export const pushDockerTags = async ({
   dstRegistry: Registry
   dryRun: boolean
 }): Promise<void> => {
-  core.info(`Pushing shorthand tags, dry run: ${dryRun}`)
+  core.info(`Pushing shorthand tags - dry run: ${dryRun}`)
 
   let currentSrcRegistry = ''
   if (srcRegistry.registry === 'github') {
@@ -27,11 +27,10 @@ export const pushDockerTags = async ({
   }
 
   for (const tag of shorthandTags) {
-    if (dryRun) {
-      core.info(
-        `Dry run: Generate tag with docker buildx: docker buildx imagetools create --tag ${currentDstRegistry}${dstRegistry.repository}:${tag.shorthand} ${currentSrcRegistry}${srcRegistry.repository}:${tag.tag}`
-      )
-    } else {
+    core.info(
+      `${dryRun === false ? 'Executing command ' : '[DRY RUN] - Command skipped'}: docker buildx imagetools create --tag ${currentDstRegistry}${dstRegistry.repository}:${tag.shorthand} ${currentSrcRegistry}${srcRegistry.repository}:${tag.tag}`
+    )
+    if (dryRun === false) {
       await exec.exec('docker', [
         'buildx',
         'imagetools',

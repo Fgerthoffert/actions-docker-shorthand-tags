@@ -15,9 +15,7 @@ export const getPackageVersions = async ({
   packageType: 'npm' | 'maven' | 'rubygems' | 'docker' | 'nuget' | 'container'
   packageName: string
 }): Promise<GitHubPackageVersion[] | undefined> => {
-  core.info(
-    `Fetching details about organization ${ownerLogin}, package type ${packageType}, package name ${packageName}`
-  )
+  core.info(`Fetching versions for package ${packageName}`)
 
   const MyOctokit = Octokit.plugin(paginateRest)
   const octokit = new MyOctokit({ auth: inputGithubToken })
