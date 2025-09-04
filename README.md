@@ -94,13 +94,16 @@ jobs:
       - name: Generate Docker shorthand tags
         uses: fgerthoffert/actions-docker-shorthand-tags@main
         with:
-          tags: |
-            1.2.3
-            2.0.0
-            1.2.3-SNAPSHOT
-            2.0.0-SNAPSHOT
-          digitsCount: 3
-          snapshotSuffix: -SNAPSHOT
+          src_registry: github
+          src_repository: myorg/myrepo
+          src_username: username
+          src_secret: token
+          dst_registry: github
+          dst_repository: myorg/myrepo
+          dst_username: username
+          dst_secret: token
+          create_latest: true
+          dry_run: true
 ```
 
 ## Inputs
