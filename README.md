@@ -45,6 +45,10 @@ try to stricly match these based on a provided digits count and snapshot suffix.
 This strict matching is there to avoid mistakenly processing an existing
 shorthand as an actual version in need of a shorthand.
 
+In the configuration, the repository from which the existing tags are fetched is
+different from the repository to which the shorthand tags are pushed. This makes
+it possible to copy tags from one repository to the other if they are different.
+
 ## Sample
 
 Using the following parameters
