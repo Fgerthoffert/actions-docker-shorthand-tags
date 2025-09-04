@@ -43,7 +43,7 @@ Docker containers will not need to be downloaded into the local runner.
 The action support both releases and "snapshot/development" versions and will
 try to stricly match these based on a provided digits count and snapshot suffix.
 This strict matching is there to avoid mistakenly processing an existing
-shorthand as an actual release.
+shorthand as an actual version in need of a shorthand.
 
 ## Sample
 
@@ -77,7 +77,7 @@ The following shorthand tags will be created:
 2.1.0 => No Shorthands created
 2.1.1 => 2.1
 2.2.0 => 2.2
-2.3.0 => 2.3, 2
+2.3.0 => 2.3, 2, latest
 3.0.0-SNAPSHOT => 3.0-SNAPSHOT, 3-SNAPSHOT
 ```
 
