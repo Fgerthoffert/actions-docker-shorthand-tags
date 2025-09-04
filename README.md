@@ -2,7 +2,7 @@
 <p align="center">
   <img alt="ZenCrepesLogo" src="docs/zencrepes-logo.png" height="140" />
   <h2 align="center">Docker Shorthand tags</h2>
-  <p align="center">A GitHub Action to generate shorthand tags 
+  <p align="center">A GitHub Action to generate shorthand tags
   for Docker images following semver</p>
 </p>
 
@@ -107,11 +107,11 @@ jobs:
 
 | Input                  | Description                                                                                                                                                                | Required | Default     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------- |
-| `src_registry`         | Source Docker registry (e.g. Dockerhub, github)                                                                                                                            | Yes      | -           |
+| `src_registry`         | Source Docker registry (e.g. DockerHub, GitHub)                                                                                                                            | Yes      | -           |
 | `src_repository`       | Source Docker repository (e.g. user/repository)                                                                                                                            | Yes      | -           |
 | `src_username`         | Username to connect to the source registry                                                                                                                                 | Yes      | -           |
 | `src_secret`           | Secret to connect to the source registry (password or token)                                                                                                               | Yes      | -           |
-| `dst_registry`         | Destination Docker registry (e.g. Dockerhub, github)                                                                                                                       | Yes      | -           |
+| `dst_registry`         | Destination Docker registry (e.g. DockerHub, GitHub)                                                                                                                       | Yes      | -           |
 | `dst_repository`       | Destination Docker repository (e.g. user/repository)                                                                                                                       | Yes      | -           |
 | `dst_username`         | Username to connect to the destination registry                                                                                                                            | Yes      | -           |
 | `dst_secret`           | Secret to connect to the destination registry (password or token)                                                                                                          | Yes      | -           |
