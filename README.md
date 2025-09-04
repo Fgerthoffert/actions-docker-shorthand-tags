@@ -1,8 +1,9 @@
-<!-- markdownlint-disable MD041 -->
+<!-- markdownlint-disable MD041 MD033 -->
 <p align="center">
   <img alt="ZenCrepesLogo" src="docs/zencrepes-logo.png" height="140" />
   <h2 align="center">Docker Shorthand tags</h2>
-  <p align="center">A GitHub Action to generate shorthand tags for Docker images following semver</p>
+  <p align="center">A GitHub Action to generate shorthand tags 
+  for Docker images following semver</p>
 </p>
 
 ---
@@ -31,13 +32,13 @@ releases.
 
 You need to provide two registries as part of the parameters:
 
-- a Source registry used to collect the list of existing docker tags. This
-  currently only supports Docker Hub or Github and will use their respective API
+- a Source registry used to collect the list of existing Docker tags. This
+  currently only supports Docker Hub or GitHub and will use their respective API
   to fetch all tags published there.
 - a Destination registry to which the shorthand tags will be pushed.
 
-Note that the shorthand tags are created using docker buildx imagetools, docker
-containers will not need to be downloaded into the local runner.
+Note that the shorthand tags are created using `docker buildx imagetools`,
+Docker containers will not need to be downloaded into the local runner.
 
 The action support both releases and "snapshot/development" versions and will
 try to stricly match these based on a provided digits count and snapshot suffix.
@@ -56,7 +57,7 @@ create_latest: true
 
 And assuming the source repository has the following images:
 
-```
+```bash
 1.0.0
 1.1.0
 1.2.0-SNAPSHOT
@@ -68,7 +69,7 @@ And assuming the source repository has the following images:
 
 The following shorthand tags will be created:
 
-```
+```bash
 1.0.0 => 1.0
 1.1.0 => 1.0, 1
 1.2.0-SNAPSHOT => 1.2-SNAPSHOT, 1-SNAPSHOT
@@ -106,18 +107,18 @@ jobs:
 
 | Input                  | Description                                                                                                                                                                | Required | Default     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------- |
-| `src_registry`         | Source Docker registry (e.g. dockerhub, github)                                                                                                                            | Yes      | -           |
-| `src_repository`       | Source Docker repository (e.g. user/repo)                                                                                                                                  | Yes      | -           |
+| `src_registry`         | Source Docker registry (e.g. Dockerhub, github)                                                                                                                            | Yes      | -           |
+| `src_repository`       | Source Docker repository (e.g. user/repository)                                                                                                                            | Yes      | -           |
 | `src_username`         | Username to connect to the source registry                                                                                                                                 | Yes      | -           |
 | `src_secret`           | Secret to connect to the source registry (password or token)                                                                                                               | Yes      | -           |
-| `dst_registry`         | Destination Docker registry (e.g. dockerhub, github)                                                                                                                       | Yes      | -           |
-| `dst_repository`       | Destination Docker repository (e.g. user/repo)                                                                                                                             | Yes      | -           |
+| `dst_registry`         | Destination Docker registry (e.g. Dockerhub, github)                                                                                                                       | Yes      | -           |
+| `dst_repository`       | Destination Docker repository (e.g. user/repository)                                                                                                                       | Yes      | -           |
 | `dst_username`         | Username to connect to the destination registry                                                                                                                            | Yes      | -           |
 | `dst_secret`           | Secret to connect to the destination registry (password or token)                                                                                                          | Yes      | -           |
 | `dev_cache`            | Enable development cache, this prevents the action from fetching data from the source registry too frequently during development                                           | No       | `false`     |
 | `version_digits_count` | Number of version digits to include in the shorthand tags (for example 3 for 1.2.3 or 4 for 1.2.3.4)                                                                       | No       | `3`         |
 | `snapshot_suffix`      | Suffix for which shorthands should be created (for example 1-SNAPSHOT and 1.2-SNAPSHOT for 1.2.3-SNAPSHOT)                                                                 | No       | `-SNAPSHOT` |
-| `dry_run`              | Enable dry run mode, this prevents the action from making any changes to the target registry during development. Will output the docker commands instead of executing them | No       | `true`      |
+| `dry_run`              | Enable dry run mode, this prevents the action from making any changes to the target registry during development. Will output the Docker commands instead of executing them | No       | `true`      |
 | `create_latest`        | Enable creation of latest tags (e.g. latest) for most recent (highest digit) release pushed                                                                                | No       | `false`     |
 
 Note that if you are using GitHub Packages as a source repository, the secret
