@@ -1,6 +1,7 @@
 import * as core from '@actions/core'
 import { Octokit } from '@octokit/core'
 import { paginateRest } from '@octokit/plugin-paginate-rest'
+import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods'
 
 import { GitHubPackageVersion } from '../../types/index.js'
 
@@ -17,17 +18,17 @@ export const getPackageVersions = async ({
 }): Promise<GitHubPackageVersion[] | undefined> => {
   core.info(`Fetching versions for package ${packageName}`)
 
-  const MyOctokit = Octokit.plugin(paginateRest)
+  const MyOctokit = Octokit.plugin(paginateRest, restEndpointMethods)
   const octokit = new MyOctokit({ auth: inputGithubToken })
 
   try {
-    const response = await octokit.request(
-      'GET /orgs/{org}/packages/{package_type}/{package_name}/versions',
+    const response = await octokit.paginate(
+      octokit.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
       {
         org: ownerLogin,
         package_type: packageType,
         package_name: packageName,
-        per_page: 30,
+        per_page: 100,
         state: 'active', // There's no point in fetching deleted tags
         headers: {
           'X-GitHub-Api-Version': '2022-11-28'
@@ -35,9 +36,8 @@ export const getPackageVersions = async ({
       }
     )
 
-    const packages = response.data.map(
-      (pkg) => pkg as unknown as GitHubPackageVersion
-    )
+    const packages = response.map((v) => v as unknown as GitHubPackageVersion)
+
     return packages
   } catch (error: unknown) {
     let errorMessage = 'Unknown error occurred while fetching package details'
