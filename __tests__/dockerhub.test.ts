@@ -11,16 +11,16 @@ import * as core from '../__fixtures__/core.js'
 
 import type { DockerHubAuth } from '../src/types/index.js'
 
+// Keep retries instant by stubbing the sleep used by withRetry.
+const sleep = jest.fn(async () => 'done!')
+
 jest.unstable_mockModule('@actions/core', () => core)
+jest.unstable_mockModule('../src/utils/sleep.js', () => ({ sleep }))
 
 let getDockerHubToken: typeof import('../src/repositories/dockerhub/getDockerHubToken.js').getDockerHubToken
 let getDockerTags: typeof import('../src/repositories/dockerhub/getDockerTags.js').getDockerTags
 
 const fetchMock = jest.fn<typeof fetch>()
-// process.exit is called on the failure paths; stub it so the suite keeps running
-const exitSpy = jest
-  .spyOn(process, 'exit')
-  .mockImplementation((() => undefined) as never)
 
 beforeAll(async () => {
   global.fetch = fetchMock
@@ -59,7 +59,6 @@ const auth: DockerHubAuth = {
 describe('getDockerHubToken', () => {
   beforeEach(() => {
     jest.resetAllMocks()
-    exitSpy.mockImplementation((() => undefined) as never)
   })
 
   it('returns the token on a successful response', async () => {
@@ -69,7 +68,7 @@ describe('getDockerHubToken', () => {
     const result = await getDockerHubToken({ dockerHubAuth: auth })
 
     expect(result).toEqual(token)
-    expect(core.setFailed).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('sends a Basic Authorization header to the token endpoint', async () => {
@@ -86,45 +85,64 @@ describe('getDockerHubToken', () => {
     })
   })
 
-  it('fails and exits when the response is not ok', async () => {
-    fetchMock.mockResolvedValue(
-      makeResponse(
-        { token: '', expires_in: 0, issued_at: '' },
-        { ok: false, status: 401, statusText: 'Unauthorized' }
+  it('retries on a transient server error and then succeeds', async () => {
+    const token = { token: 'abc', expires_in: 300, issued_at: '2024-01-01' }
+    fetchMock
+      .mockResolvedValueOnce(
+        makeResponse(
+          {},
+          { ok: false, status: 503, statusText: 'Service Unavailable' }
+        )
       )
-    )
-
-    await getDockerHubToken({ dockerHubAuth: auth })
-
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining('401 Unauthorized')
-    )
-    expect(exitSpy).toHaveBeenCalledWith(1)
-  })
-
-  it('returns undefined and logs an error when fetch throws', async () => {
-    fetchMock.mockRejectedValue(new Error('network down'))
+      .mockResolvedValueOnce(makeResponse(token))
 
     const result = await getDockerHubToken({ dockerHubAuth: auth })
 
-    expect(result).toBeUndefined()
-    expect(core.error).toHaveBeenCalledWith(
-      expect.stringContaining('network down')
+    expect(result).toEqual(token)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('503'))
+  })
+
+  it('does not retry a non-retryable client error and rejects', async () => {
+    fetchMock.mockResolvedValue(
+      makeResponse({}, { ok: false, status: 401, statusText: 'Unauthorized' })
     )
+
+    await expect(getDockerHubToken({ dockerHubAuth: auth })).rejects.toThrow(
+      '401'
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('not retryable')
+    )
+  })
+
+  it('retries network errors and rejects after exhausting retries', async () => {
+    fetchMock.mockRejectedValue(new Error('network down'))
+
+    await expect(getDockerHubToken({ dockerHubAuth: auth })).rejects.toThrow(
+      'network down'
+    )
+    // 1 initial attempt + 4 retries
+    expect(fetchMock).toHaveBeenCalledTimes(5)
   })
 })
 
 describe('getDockerTags', () => {
+  const authedAuth: DockerHubAuth = {
+    ...auth,
+    token: { ...auth.token, token: 'abc' }
+  }
+
   beforeEach(() => {
     jest.resetAllMocks()
-    exitSpy.mockImplementation((() => undefined) as never)
   })
 
   it('returns the list of tags from the registry response', async () => {
     fetchMock.mockResolvedValue(makeResponse({ tags: ['1.2.3', '2.0.0'] }))
 
     const result = await getDockerTags({
-      dockerHubAuth: { ...auth, token: { ...auth.token, token: 'abc' } },
+      dockerHubAuth: authedAuth,
       dockerHubRepository: 'acme/app'
     })
 
@@ -135,7 +153,7 @@ describe('getDockerTags', () => {
     fetchMock.mockResolvedValue(makeResponse({ tags: [] }))
 
     await getDockerTags({
-      dockerHubAuth: { ...auth, token: { ...auth.token, token: 'abc' } },
+      dockerHubAuth: authedAuth,
       dockerHubRepository: 'acme/app'
     })
 
@@ -146,29 +164,36 @@ describe('getDockerTags', () => {
     })
   })
 
-  it('fails and exits when fetch throws', async () => {
-    fetchMock.mockRejectedValue(new Error('boom'))
+  it('retries on a transient server error and then succeeds', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        makeResponse({}, { ok: false, status: 500, statusText: 'Server Error' })
+      )
+      .mockResolvedValueOnce(makeResponse({ tags: ['1.0.0'] }))
 
-    await getDockerTags({
-      dockerHubAuth: auth,
+    const result = await getDockerTags({
+      dockerHubAuth: authedAuth,
       dockerHubRepository: 'acme/app'
     })
 
-    expect(core.setFailed).toHaveBeenCalledWith(expect.stringContaining('boom'))
-    expect(exitSpy).toHaveBeenCalledWith(1)
+    expect(result).toEqual(['1.0.0'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('500'))
   })
 
-  it('reports an unknown error when a non-Error value is thrown', async () => {
-    fetchMock.mockRejectedValue('plain string error')
+  it('rejects after exhausting retries on persistent failures', async () => {
+    fetchMock.mockRejectedValue(new Error('boom'))
 
-    await getDockerTags({
-      dockerHubAuth: auth,
-      dockerHubRepository: 'acme/app'
-    })
-
-    expect(core.setFailed).toHaveBeenCalledWith(
-      'Failed to fetch package: Unknown error occurred while fetching package details'
+    await expect(
+      getDockerTags({
+        dockerHubAuth: authedAuth,
+        dockerHubRepository: 'acme/app'
+      })
+    ).rejects.toThrow('boom')
+    // 1 initial attempt + 4 retries
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('failed after 5 attempt(s)')
     )
-    expect(exitSpy).toHaveBeenCalledWith(1)
   })
 })

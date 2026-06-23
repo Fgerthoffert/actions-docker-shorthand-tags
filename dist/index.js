@@ -88287,28 +88287,94 @@ function requireGithub () {
 
 var githubExports = requireGithub();
 
+/**
+ * sleep for a number of milliseconds.
+ * @param milliseconds The number of milliseconds to sleep.
+ * @returns {Promise<string>} Resolves with 'done!' after the wait is over.
+ */
+const sleep = async (milliseconds) => {
+    return new Promise((resolve) => {
+        if (isNaN(milliseconds)) {
+            throw new Error('milliseconds not a number');
+        }
+        setTimeout(() => resolve('done!'), milliseconds);
+    });
+};
+
+const errorMessage = (error) => error instanceof Error ? error.message : String(error);
+/**
+ * Determines whether an HTTP-like error is transient and worth retrying.
+ *
+ * Network errors (no status) and server errors (5xx) are retried, as is
+ * rate-limiting (429). Other client errors (e.g. 401, 404) are not, since
+ * retrying them will not change the outcome.
+ */
+const isRetryableHttpError = (error) => {
+    const status = error?.status;
+    if (status === undefined) {
+        // No HTTP status usually means a network/transport error, which is transient
+        return true;
+    }
+    if (status === 429) {
+        return true;
+    }
+    return status >= 500;
+};
+/**
+ * Runs an async function, retrying it with exponential backoff when it throws.
+ *
+ * Every attempt and failure is logged so that intermittent issues are visible
+ * in the action logs rather than silently swallowed.
+ *
+ * @param fn - The async operation to execute.
+ * @param options - Retry behaviour configuration.
+ * @returns The resolved value of `fn`.
+ * @throws The last error encountered once all retries are exhausted, or
+ *         immediately if `shouldRetry` returns false.
+ */
+const withRetry = async (fn, options = {}) => {
+    const { retries = 4, minDelayMs = 1000, maxDelayMs = 15000, label = 'operation', shouldRetry = () => true } = options;
+    const totalAttempts = retries + 1;
+    let lastError;
+    for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+        try {
+            if (attempt > 1) {
+                info(`Attempt ${attempt} of ${totalAttempts} for ${label}`);
+            }
+            return await fn();
+        }
+        catch (error$1) {
+            lastError = error$1;
+            const message = errorMessage(error$1);
+            if (attempt >= totalAttempts || !shouldRetry(error$1)) {
+                error(`${label} failed after ${attempt} attempt(s): ${message}${attempt < totalAttempts ? ' (error is not retryable)' : ''}`);
+                throw error$1;
+            }
+            const delay = Math.min(minDelayMs * 2 ** (attempt - 1), maxDelayMs);
+            warning(`${label} failed (attempt ${attempt} of ${totalAttempts}): ${message}. Retrying in ${delay}ms...`);
+            await sleep(delay);
+        }
+    }
+    // Unreachable: the loop either returns or throws, but satisfies the compiler.
+    throw lastError;
+};
+
 const getPackage = async ({ inputGithubToken, ownerLogin, packageType, packageName }) => {
     info(`Fetching details about package ${packageName} in organization ${ownerLogin} (type: ${packageType})`);
     const octokit = githubExports.getOctokit(inputGithubToken);
-    try {
-        const response = await octokit.request('GET /orgs/{org}/packages/{package_type}/{package_name}', {
-            org: ownerLogin,
-            package_type: packageType,
-            package_name: packageName,
-            headers: {
-                'X-GitHub-Api-Version': '2022-11-28'
-            }
-        });
-        return response.data;
-    }
-    catch (error) {
-        let errorMessage = 'Unknown error occurred while fetching package details';
-        if (typeof error === 'object' && error !== null && 'message' in error) {
-            errorMessage = String(error.message);
+    // A transient server error should not fail the run; retry with backoff.
+    const response = await withRetry(() => octokit.request('GET /orgs/{org}/packages/{package_type}/{package_name}', {
+        org: ownerLogin,
+        package_type: packageType,
+        package_name: packageName,
+        headers: {
+            'X-GitHub-Api-Version': '2022-11-28'
         }
-        setFailed(`Failed to fetch package: ${errorMessage}`);
-        process.exit(1);
-    }
+    }), {
+        label: `fetching package ${packageName}`,
+        shouldRetry: isRetryableHttpError
+    });
+    return response.data;
 };
 
 function getUserAgent() {
@@ -92842,8 +92908,13 @@ const getPackageVersions = async ({ inputGithubToken, ownerLogin, packageType, p
     info(`Fetching versions for package ${packageName}`);
     const MyOctokit = Octokit.plugin(paginateRest, restEndpointMethods);
     const octokit = new MyOctokit({ auth: inputGithubToken });
-    try {
-        const response = await octokit.paginate(octokit.rest.packages.getAllPackageVersionsForPackageOwnedByOrg, {
+    // Fetching every version of a package can span dozens of paginated requests.
+    // A single transient server error should not fail the whole run, so the
+    // pagination is wrapped in a retry with exponential backoff. Progress is
+    // logged per page to make long fetches and intermittent failures observable.
+    const fetchAllVersions = () => {
+        let pageCount = 0;
+        return octokit.paginate(octokit.rest.packages.getAllPackageVersionsForPackageOwnedByOrg, {
             org: ownerLogin,
             package_type: packageType,
             package_name: packageName,
@@ -92852,18 +92923,19 @@ const getPackageVersions = async ({ inputGithubToken, ownerLogin, packageType, p
             headers: {
                 'X-GitHub-Api-Version': '2022-11-28'
             }
+        }, (response) => {
+            pageCount += 1;
+            info(`Fetched page ${pageCount} (${response.data.length} versions) for package ${packageName}`);
+            return response.data;
         });
-        const packages = response.map((v) => v);
-        return packages;
-    }
-    catch (error) {
-        let errorMessage = 'Unknown error occurred while fetching package details';
-        if (typeof error === 'object' && error !== null && 'message' in error) {
-            errorMessage = String(error.message);
-        }
-        setFailed(`Failed to fetch package: ${errorMessage}`);
-        process.exit(1);
-    }
+    };
+    const response = await withRetry(fetchAllVersions, {
+        label: `fetching versions for package ${packageName}`,
+        shouldRetry: isRetryableHttpError
+    });
+    const packages = response.map((v) => v);
+    info(`Retrieved ${packages.length} version(s) for package ${packageName}`);
+    return packages;
 };
 
 const fetchExistingTags$1 = async ({ inputDevCache, inputGithubToken, inputSrcRepository }) => {
@@ -92923,51 +92995,53 @@ const fetchExistingTags$1 = async ({ inputDevCache, inputGithubToken, inputSrcRe
 };
 
 const getDockerHubToken = async ({ dockerHubAuth }) => {
-    try {
-        const url = `https://${dockerHubAuth.domain}/token?service=${dockerHubAuth.service}&scope=${encodeURIComponent(dockerHubAuth.scope)}&offline_token=${dockerHubAuth.offlineToken}&client_id=${dockerHubAuth.clientId}`;
-        info(`Fetching Docker Hub token at: ${url}`);
+    const url = `https://${dockerHubAuth.domain}/token?service=${dockerHubAuth.service}&scope=${encodeURIComponent(dockerHubAuth.scope)}&offline_token=${dockerHubAuth.offlineToken}&client_id=${dockerHubAuth.clientId}`;
+    info(`Fetching Docker Hub token at: ${url}`);
+    const fetchToken = async () => {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
                 Authorization: `Basic ${dockerHubAuth.authorization}`
             }
         });
-        const token = (await response.clone().json());
-        info(`Token issued at ${token.issued_at}, will expired in ${token.expires_in} seconds`);
         if (!response.ok) {
-            setFailed(`Failed to fetch Docker Hub token: ${response.status} ${response.statusText}`);
-            process.exit(1);
+            // Attach the HTTP status so withRetry can decide whether to retry.
+            throw Object.assign(new Error(`Docker Hub token request failed: ${response.status} ${response.statusText}`), { status: response.status });
         }
-        return token;
-    }
-    catch (error$1) {
-        error(`Error fetching Docker Hub token: ${error$1.message}`);
-        return undefined;
-    }
+        return (await response.clone().json());
+    };
+    const token = await withRetry(fetchToken, {
+        label: 'fetching Docker Hub token',
+        shouldRetry: isRetryableHttpError
+    });
+    info(`Token issued at ${token.issued_at}, will expire in ${token.expires_in} seconds`);
+    return token;
 };
 
 const getDockerTags = async ({ dockerHubAuth, dockerHubRepository }) => {
+    const url = `https://registry-1.docker.io/v2/${dockerHubRepository}/tags/list`;
     info(`Fetching all tags within repository: ${dockerHubRepository}`);
-    try {
-        const url = `https://registry-1.docker.io/v2/${dockerHubRepository}/tags/list`;
-        info(`Fetching Docker Hub tags from: ${url}`);
+    info(`Fetching Docker Hub tags from: ${url}`);
+    const fetchTags = async () => {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
                 Authorization: `Bearer ${dockerHubAuth.token.token}`
             }
         });
-        const tags = (await response.clone().json());
-        return tags.tags;
-    }
-    catch (error) {
-        let errorMessage = 'Unknown error occurred while fetching package details';
-        if (typeof error === 'object' && error !== null && 'message' in error) {
-            errorMessage = String(error.message);
+        if (!response.ok) {
+            // Attach the HTTP status so withRetry can decide whether to retry.
+            throw Object.assign(new Error(`Docker Hub tags request failed: ${response.status} ${response.statusText}`), { status: response.status });
         }
-        setFailed(`Failed to fetch package: ${errorMessage}`);
-        process.exit(1);
-    }
+        const body = (await response.clone().json());
+        return body.tags;
+    };
+    const tags = await withRetry(fetchTags, {
+        label: `fetching tags for repository ${dockerHubRepository}`,
+        shouldRetry: isRetryableHttpError
+    });
+    info(`Retrieved ${tags.length} tag(s) for repository ${dockerHubRepository}`);
+    return tags;
 };
 
 const fetchExistingTags = async ({ inputDevCache, inputDockerHubUsername, inputDockerHubPassword, inputSrcRepository }) => {

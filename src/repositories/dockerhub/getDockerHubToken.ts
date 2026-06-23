@@ -1,16 +1,17 @@
 import * as core from '@actions/core'
 
 import { DockerHubToken, DockerHubAuth } from '../../types/index.js'
+import { withRetry, isRetryableHttpError } from '../../utils/index.js'
 
 export const getDockerHubToken = async ({
   dockerHubAuth
 }: {
   dockerHubAuth: DockerHubAuth
 }): Promise<DockerHubToken | undefined> => {
-  try {
-    const url = `https://${dockerHubAuth.domain}/token?service=${dockerHubAuth.service}&scope=${encodeURIComponent(dockerHubAuth.scope)}&offline_token=${dockerHubAuth.offlineToken}&client_id=${dockerHubAuth.clientId}`
-    core.info(`Fetching Docker Hub token at: ${url}`)
+  const url = `https://${dockerHubAuth.domain}/token?service=${dockerHubAuth.service}&scope=${encodeURIComponent(dockerHubAuth.scope)}&offline_token=${dockerHubAuth.offlineToken}&client_id=${dockerHubAuth.clientId}`
+  core.info(`Fetching Docker Hub token at: ${url}`)
 
+  const fetchToken = async (): Promise<DockerHubToken> => {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -18,23 +19,29 @@ export const getDockerHubToken = async ({
       }
     })
 
-    const token = (await response.clone().json()) as DockerHubToken
-    core.info(
-      `Token issued at ${token.issued_at}, will expired in ${token.expires_in} seconds`
-    )
-
     if (!response.ok) {
-      core.setFailed(
-        `Failed to fetch Docker Hub token: ${response.status} ${response.statusText}`
+      // Attach the HTTP status so withRetry can decide whether to retry.
+      throw Object.assign(
+        new Error(
+          `Docker Hub token request failed: ${response.status} ${response.statusText}`
+        ),
+        { status: response.status }
       )
-      process.exit(1)
     }
 
-    return token
-  } catch (error) {
-    core.error(`Error fetching Docker Hub token: ${(error as Error).message}`)
-    return undefined
+    return (await response.clone().json()) as DockerHubToken
   }
+
+  const token = await withRetry(fetchToken, {
+    label: 'fetching Docker Hub token',
+    shouldRetry: isRetryableHttpError
+  })
+
+  core.info(
+    `Token issued at ${token.issued_at}, will expire in ${token.expires_in} seconds`
+  )
+
+  return token
 }
 
 export default getDockerHubToken
