@@ -26,7 +26,7 @@ export const getPackageVersions = async ({
   // A single transient server error should not fail the whole run, so the
   // pagination is wrapped in a retry with exponential backoff. Progress is
   // logged per page to make long fetches and intermittent failures observable.
-  const fetchAllVersions = (): Promise<GitHubPackageVersion[]> => {
+  const fetchAllVersions = () => {
     let pageCount = 0
     return octokit.paginate(
       octokit.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
@@ -47,7 +47,7 @@ export const getPackageVersions = async ({
         )
         return response.data
       }
-    ) as Promise<GitHubPackageVersion[]>
+    )
   }
 
   const response = await withRetry(fetchAllVersions, {

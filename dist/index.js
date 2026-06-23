@@ -92995,51 +92995,53 @@ const fetchExistingTags$1 = async ({ inputDevCache, inputGithubToken, inputSrcRe
 };
 
 const getDockerHubToken = async ({ dockerHubAuth }) => {
-    try {
-        const url = `https://${dockerHubAuth.domain}/token?service=${dockerHubAuth.service}&scope=${encodeURIComponent(dockerHubAuth.scope)}&offline_token=${dockerHubAuth.offlineToken}&client_id=${dockerHubAuth.clientId}`;
-        info(`Fetching Docker Hub token at: ${url}`);
+    const url = `https://${dockerHubAuth.domain}/token?service=${dockerHubAuth.service}&scope=${encodeURIComponent(dockerHubAuth.scope)}&offline_token=${dockerHubAuth.offlineToken}&client_id=${dockerHubAuth.clientId}`;
+    info(`Fetching Docker Hub token at: ${url}`);
+    const fetchToken = async () => {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
                 Authorization: `Basic ${dockerHubAuth.authorization}`
             }
         });
-        const token = (await response.clone().json());
-        info(`Token issued at ${token.issued_at}, will expired in ${token.expires_in} seconds`);
         if (!response.ok) {
-            setFailed(`Failed to fetch Docker Hub token: ${response.status} ${response.statusText}`);
-            process.exit(1);
+            // Attach the HTTP status so withRetry can decide whether to retry.
+            throw Object.assign(new Error(`Docker Hub token request failed: ${response.status} ${response.statusText}`), { status: response.status });
         }
-        return token;
-    }
-    catch (error$1) {
-        error(`Error fetching Docker Hub token: ${error$1.message}`);
-        return undefined;
-    }
+        return (await response.clone().json());
+    };
+    const token = await withRetry(fetchToken, {
+        label: 'fetching Docker Hub token',
+        shouldRetry: isRetryableHttpError
+    });
+    info(`Token issued at ${token.issued_at}, will expire in ${token.expires_in} seconds`);
+    return token;
 };
 
 const getDockerTags = async ({ dockerHubAuth, dockerHubRepository }) => {
+    const url = `https://registry-1.docker.io/v2/${dockerHubRepository}/tags/list`;
     info(`Fetching all tags within repository: ${dockerHubRepository}`);
-    try {
-        const url = `https://registry-1.docker.io/v2/${dockerHubRepository}/tags/list`;
-        info(`Fetching Docker Hub tags from: ${url}`);
+    info(`Fetching Docker Hub tags from: ${url}`);
+    const fetchTags = async () => {
         const response = await fetch(url, {
             method: 'GET',
             headers: {
                 Authorization: `Bearer ${dockerHubAuth.token.token}`
             }
         });
-        const tags = (await response.clone().json());
-        return tags.tags;
-    }
-    catch (error) {
-        let errorMessage = 'Unknown error occurred while fetching package details';
-        if (typeof error === 'object' && error !== null && 'message' in error) {
-            errorMessage = String(error.message);
+        if (!response.ok) {
+            // Attach the HTTP status so withRetry can decide whether to retry.
+            throw Object.assign(new Error(`Docker Hub tags request failed: ${response.status} ${response.statusText}`), { status: response.status });
         }
-        setFailed(`Failed to fetch package: ${errorMessage}`);
-        process.exit(1);
-    }
+        const body = (await response.clone().json());
+        return body.tags;
+    };
+    const tags = await withRetry(fetchTags, {
+        label: `fetching tags for repository ${dockerHubRepository}`,
+        shouldRetry: isRetryableHttpError
+    });
+    info(`Retrieved ${tags.length} tag(s) for repository ${dockerHubRepository}`);
+    return tags;
 };
 
 const fetchExistingTags = async ({ inputDevCache, inputDockerHubUsername, inputDockerHubPassword, inputSrcRepository }) => {

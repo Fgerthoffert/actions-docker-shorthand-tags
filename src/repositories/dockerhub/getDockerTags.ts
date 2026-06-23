@@ -1,6 +1,7 @@
 import * as core from '@actions/core'
 
 import { DockerHubAuth } from '../../types/index.js'
+import { withRetry, isRetryableHttpError } from '../../utils/index.js'
 
 export const getDockerTags = async ({
   dockerHubAuth,
@@ -9,12 +10,11 @@ export const getDockerTags = async ({
   dockerHubAuth: DockerHubAuth
   dockerHubRepository: string
 }): Promise<string[] | undefined> => {
+  const url = `https://registry-1.docker.io/v2/${dockerHubRepository}/tags/list`
   core.info(`Fetching all tags within repository: ${dockerHubRepository}`)
+  core.info(`Fetching Docker Hub tags from: ${url}`)
 
-  try {
-    const url = `https://registry-1.docker.io/v2/${dockerHubRepository}/tags/list`
-    core.info(`Fetching Docker Hub tags from: ${url}`)
-
+  const fetchTags = async (): Promise<string[]> => {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -22,16 +22,30 @@ export const getDockerTags = async ({
       }
     })
 
-    const tags = (await response.clone().json()) as { tags: string[] }
-    return tags.tags
-  } catch (error: unknown) {
-    let errorMessage = 'Unknown error occurred while fetching package details'
-    if (typeof error === 'object' && error !== null && 'message' in error) {
-      errorMessage = String((error as { message?: unknown }).message)
+    if (!response.ok) {
+      // Attach the HTTP status so withRetry can decide whether to retry.
+      throw Object.assign(
+        new Error(
+          `Docker Hub tags request failed: ${response.status} ${response.statusText}`
+        ),
+        { status: response.status }
+      )
     }
-    core.setFailed(`Failed to fetch package: ${errorMessage}`)
-    process.exit(1)
+
+    const body = (await response.clone().json()) as { tags: string[] }
+    return body.tags
   }
+
+  const tags = await withRetry(fetchTags, {
+    label: `fetching tags for repository ${dockerHubRepository}`,
+    shouldRetry: isRetryableHttpError
+  })
+
+  core.info(
+    `Retrieved ${tags.length} tag(s) for repository ${dockerHubRepository}`
+  )
+
+  return tags
 }
 
 export default getDockerTags
