@@ -20,9 +20,8 @@ jest.unstable_mockModule('os', () => ({ tmpdir }))
 let getCacheDirectory: typeof import('../src/repositories/getCacheDirectory.js').getCacheDirectory
 
 beforeAll(async () => {
-  ;({ getCacheDirectory } = await import(
-    '../src/repositories/getCacheDirectory.js'
-  ))
+  ;({ getCacheDirectory } =
+    await import('../src/repositories/getCacheDirectory.js'))
 })
 
 describe('getCacheDirectory', () => {

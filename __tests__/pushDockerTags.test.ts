@@ -25,9 +25,8 @@ let createLatestDockerTag: typeof import('../src/pushDockerTags/createLatestDock
 beforeAll(async () => {
   ;({ pushDockerTags } = await import('../src/pushDockerTags/index.js'))
   ;({ dockerLogin } = await import('../src/pushDockerTags/dockerLogin.js'))
-  ;({ createLatestDockerTag } = await import(
-    '../src/pushDockerTags/createLatestDockerTag.js'
-  ))
+  ;({ createLatestDockerTag } =
+    await import('../src/pushDockerTags/createLatestDockerTag.js'))
 })
 
 const githubRegistry: Registry = {

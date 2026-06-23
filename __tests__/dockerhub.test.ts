@@ -24,12 +24,10 @@ const exitSpy = jest
 
 beforeAll(async () => {
   global.fetch = fetchMock
-  ;({ getDockerHubToken } = await import(
-    '../src/repositories/dockerhub/getDockerHubToken.js'
-  ))
-  ;({ getDockerTags } = await import(
-    '../src/repositories/dockerhub/getDockerTags.js'
-  ))
+  ;({ getDockerHubToken } =
+    await import('../src/repositories/dockerhub/getDockerHubToken.js'))
+  ;({ getDockerTags } =
+    await import('../src/repositories/dockerhub/getDockerTags.js'))
 })
 
 const makeResponse = (
