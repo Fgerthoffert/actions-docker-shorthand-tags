@@ -38,7 +38,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "flat-cache": "^6.1.8"
+    "flat-cache": "^6.1.14"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.8",
