@@ -4,6 +4,7 @@ import { paginateRest } from '@octokit/plugin-paginate-rest'
 import { restEndpointMethods } from '@octokit/plugin-rest-endpoint-methods'
 
 import { GitHubPackageVersion } from '../../types/index.js'
+import { withRetry, isRetryableHttpError } from '../../utils/index.js'
 
 export const getPackageVersions = async ({
   inputGithubToken,
@@ -21,8 +22,13 @@ export const getPackageVersions = async ({
   const MyOctokit = Octokit.plugin(paginateRest, restEndpointMethods)
   const octokit = new MyOctokit({ auth: inputGithubToken })
 
-  try {
-    const response = await octokit.paginate(
+  // Fetching every version of a package can span dozens of paginated requests.
+  // A single transient server error should not fail the whole run, so the
+  // pagination is wrapped in a retry with exponential backoff. Progress is
+  // logged per page to make long fetches and intermittent failures observable.
+  const fetchAllVersions = (): Promise<GitHubPackageVersion[]> => {
+    let pageCount = 0
+    return octokit.paginate(
       octokit.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
       {
         org: ownerLogin,
@@ -33,20 +39,28 @@ export const getPackageVersions = async ({
         headers: {
           'X-GitHub-Api-Version': '2022-11-28'
         }
+      },
+      (response) => {
+        pageCount += 1
+        core.info(
+          `Fetched page ${pageCount} (${response.data.length} versions) for package ${packageName}`
+        )
+        return response.data
       }
-    )
-
-    const packages = response.map((v) => v as unknown as GitHubPackageVersion)
-
-    return packages
-  } catch (error: unknown) {
-    let errorMessage = 'Unknown error occurred while fetching package details'
-    if (typeof error === 'object' && error !== null && 'message' in error) {
-      errorMessage = String((error as { message?: unknown }).message)
-    }
-    core.setFailed(`Failed to fetch package: ${errorMessage}`)
-    process.exit(1)
+    ) as Promise<GitHubPackageVersion[]>
   }
+
+  const response = await withRetry(fetchAllVersions, {
+    label: `fetching versions for package ${packageName}`,
+    shouldRetry: isRetryableHttpError
+  })
+
+  const packages = response.map((v) => v as unknown as GitHubPackageVersion)
+  core.info(
+    `Retrieved ${packages.length} version(s) for package ${packageName}`
+  )
+
+  return packages
 }
 
 export default getPackageVersions

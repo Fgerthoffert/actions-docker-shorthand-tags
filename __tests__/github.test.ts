@@ -15,7 +15,9 @@ const request = jest.fn<(route: string, params: unknown) => Promise<unknown>>()
 const getOctokit = jest.fn(() => ({ request }))
 
 const paginate =
-  jest.fn<(route: unknown, params: unknown) => Promise<unknown>>()
+  jest.fn<
+    (route: unknown, params: unknown, map?: unknown) => Promise<unknown>
+  >()
 class OctokitMock {
   static plugin() {
     return OctokitMock
@@ -26,6 +28,9 @@ class OctokitMock {
   }
 }
 
+// Keep retries instant by stubbing the sleep used by withRetry.
+const sleep = jest.fn(async () => 'done!')
+
 jest.unstable_mockModule('@actions/core', () => core)
 jest.unstable_mockModule('@actions/github', () => ({ getOctokit }))
 jest.unstable_mockModule('@octokit/core', () => ({ Octokit: OctokitMock }))
@@ -35,13 +40,10 @@ jest.unstable_mockModule('@octokit/plugin-paginate-rest', () => ({
 jest.unstable_mockModule('@octokit/plugin-rest-endpoint-methods', () => ({
   restEndpointMethods: {}
 }))
+jest.unstable_mockModule('../src/utils/sleep.js', () => ({ sleep }))
 
 let getPackage: typeof import('../src/repositories/github/getPackage.js').getPackage
 let getPackageVersions: typeof import('../src/repositories/github/getPackageVersions.js').getPackageVersions
-
-const exitSpy = jest
-  .spyOn(process, 'exit')
-  .mockImplementation((() => undefined) as never)
 
 beforeAll(async () => {
   ;({ getPackage } = await import('../src/repositories/github/getPackage.js'))
@@ -56,10 +58,14 @@ const baseArgs = {
   packageName: 'app'
 }
 
+const httpError = (
+  status: number,
+  message: string
+): Error & { status: number } => Object.assign(new Error(message), { status })
+
 describe('getPackage', () => {
   beforeEach(() => {
     jest.resetAllMocks()
-    exitSpy.mockImplementation((() => undefined) as never)
     getOctokit.mockReturnValue({ request })
   })
 
@@ -71,40 +77,56 @@ describe('getPackage', () => {
 
     expect(result).toEqual(data)
     expect(getOctokit).toHaveBeenCalledWith('token')
+    expect(request).toHaveBeenCalledTimes(1)
   })
 
-  it('marks the run as failed and exits when the request rejects', async () => {
-    request.mockRejectedValue({ message: 'not found' })
+  it('retries on a transient server error and then succeeds', async () => {
+    const data = { name: 'app', version_count: 12 }
+    request
+      .mockRejectedValueOnce(httpError(500, 'Server Error'))
+      .mockResolvedValueOnce({ data })
 
-    await getPackage(baseArgs)
+    const result = await getPackage(baseArgs)
 
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining('not found')
+    expect(result).toEqual(data)
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Server Error')
     )
-    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('does not retry a non-retryable client error and rejects', async () => {
+    request.mockRejectedValue(httpError(404, 'Not Found'))
+
+    await expect(getPackage(baseArgs)).rejects.toThrow('Not Found')
+    // 404 is not retryable, so only a single attempt is made
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('not retryable')
+    )
   })
 })
 
 describe('getPackageVersions', () => {
+  const versions: GitHubPackageVersion[] = [
+    {
+      id: '1',
+      name: 'sha',
+      url: '',
+      created_at: '2024-01-01',
+      updated_at: '2024-01-01',
+      metadata: {
+        package_type: 'container',
+        container: { tags: ['1.2.3'] }
+      }
+    }
+  ]
+
   beforeEach(() => {
     jest.resetAllMocks()
-    exitSpy.mockImplementation((() => undefined) as never)
   })
 
   it('returns the paginated list of package versions', async () => {
-    const versions: GitHubPackageVersion[] = [
-      {
-        id: '1',
-        name: 'sha',
-        url: '',
-        created_at: '2024-01-01',
-        updated_at: '2024-01-01',
-        metadata: {
-          package_type: 'container',
-          container: { tags: ['1.2.3'] }
-        }
-      }
-    ]
     paginate.mockResolvedValue(versions)
 
     const result = await getPackageVersions(baseArgs)
@@ -112,18 +134,33 @@ describe('getPackageVersions', () => {
     expect(result).toEqual(versions)
     expect(paginate).toHaveBeenCalledWith(
       'versions-route',
-      expect.objectContaining({ org: 'acme', package_name: 'app' })
+      expect.objectContaining({ org: 'acme', package_name: 'app' }),
+      expect.any(Function)
     )
   })
 
-  it('marks the run as failed and exits when pagination rejects', async () => {
-    paginate.mockRejectedValue({ message: 'rate limited' })
+  it('retries the pagination on a transient server error and then succeeds', async () => {
+    paginate
+      .mockRejectedValueOnce(httpError(503, 'Service Unavailable'))
+      .mockResolvedValueOnce(versions)
 
-    await getPackageVersions(baseArgs)
+    const result = await getPackageVersions(baseArgs)
 
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining('rate limited')
+    expect(result).toEqual(versions)
+    expect(paginate).toHaveBeenCalledTimes(2)
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Service Unavailable')
     )
-    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('rejects after exhausting retries on persistent server errors', async () => {
+    paginate.mockRejectedValue(httpError(500, 'Server Error'))
+
+    await expect(getPackageVersions(baseArgs)).rejects.toThrow('Server Error')
+    // 1 initial attempt + 4 retries
+    expect(paginate).toHaveBeenCalledTimes(5)
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('failed after 5 attempt(s)')
+    )
   })
 })
