@@ -45,9 +45,8 @@ const exitSpy = jest
 
 beforeAll(async () => {
   ;({ getPackage } = await import('../src/repositories/github/getPackage.js'))
-  ;({ getPackageVersions } = await import(
-    '../src/repositories/github/getPackageVersions.js'
-  ))
+  ;({ getPackageVersions } =
+    await import('../src/repositories/github/getPackageVersions.js'))
 })
 
 const baseArgs = {

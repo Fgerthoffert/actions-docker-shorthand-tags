@@ -55,9 +55,8 @@ jest.unstable_mockModule(
 let fetchExistingTags: typeof import('../src/repositories/dockerhub/index.js').fetchExistingTags
 
 beforeAll(async () => {
-  ;({ fetchExistingTags } = await import(
-    '../src/repositories/dockerhub/index.js'
-  ))
+  ;({ fetchExistingTags } =
+    await import('../src/repositories/dockerhub/index.js'))
 })
 
 const params = {
