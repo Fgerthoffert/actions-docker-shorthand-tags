@@ -16,7 +16,14 @@ const getKey = jest.fn<(key: string) => unknown>()
 const setKey = jest.fn()
 const save = jest.fn()
 
+// Captures the options the source passes to `new FlatCache(...)` so we can
+// assert the cache is created in the directory returned by getCacheDirectory.
+let cacheOptions: unknown
+
 class FlatCacheMock {
+  constructor(options: unknown) {
+    cacheOptions = options
+  }
   load = load
   getKey = getKey
   setKey = setKey
@@ -68,6 +75,7 @@ const makeVersion = (tags: string[]): GitHubPackageVersion =>
 describe('github fetchExistingTags', () => {
   beforeEach(() => {
     jest.resetAllMocks()
+    cacheOptions = undefined
     getCacheDirectory.mockResolvedValue('/tmp/cache')
   })
 
@@ -96,6 +104,8 @@ describe('github fetchExistingTags', () => {
       '1.2',
       '2.0.0'
     ])
+    // The cache must live in the directory returned by getCacheDirectory
+    expect(cacheOptions).toMatchObject({ cacheDir: '/tmp/cache' })
     expect(save).toHaveBeenCalledTimes(1)
   })
 

@@ -159,4 +159,18 @@ describe('getDockerTags', () => {
     expect(core.setFailed).toHaveBeenCalledWith(expect.stringContaining('boom'))
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
+
+  it('reports an unknown error when a non-Error value is thrown', async () => {
+    fetchMock.mockRejectedValue('plain string error')
+
+    await getDockerTags({
+      dockerHubAuth: auth,
+      dockerHubRepository: 'acme/app'
+    })
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      'Failed to fetch package: Unknown error occurred while fetching package details'
+    )
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
 })

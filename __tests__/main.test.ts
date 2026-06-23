@@ -171,6 +171,30 @@ describe('run', () => {
     expect(core.notice).toHaveBeenCalledWith(
       expect.stringContaining('1.2-SNAPSHOT')
     )
+    // The first pass uses no suffix, the second uses the configured suffix
+    expect(buildShortHandtags).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ suffix: '' })
+    )
+    expect(buildShortHandtags).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ suffix: '-SNAPSHOT' })
+    )
+  })
+
+  it('forwards dryRun: true to pushDockerTags and createLatestDockerTag', async () => {
+    useInputs({ dry_run: 'true', create_latest: 'true' })
+    fetchFromGitHub.mockResolvedValue(['1.2.3', '2.0.0'])
+    buildShortHandtags.mockReturnValueOnce(shorthands).mockReturnValueOnce([])
+
+    await run()
+
+    expect(pushDockerTags).toHaveBeenCalledWith(
+      expect.objectContaining({ dryRun: true })
+    )
+    expect(createLatestDockerTag).toHaveBeenCalledWith(
+      expect.objectContaining({ dryRun: true })
+    )
   })
 
   it('reports the error message via setFailed when fetching throws', async () => {
