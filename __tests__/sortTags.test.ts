@@ -35,4 +35,17 @@ describe('sortTags', () => {
     const result = sortTags(tags, 3)
     expect(result).toEqual([])
   })
+
+  it('keeps both entries when two tags share the same version', () => {
+    const tags = ['1.2.3', '1.2.3']
+    const result = sortTags([...tags], 3)
+    expect(result).toEqual(['1.2.3', '1.2.3'])
+  })
+
+  it('sorts tags without a leading numeric segment last', () => {
+    const tags = ['latest', '2.0.0', '1.5.0']
+    const result = sortTags([...tags], 3)
+    // "latest" has no numeric parts, so it is treated as 0.0.0 and sorts last
+    expect(result).toEqual(['2.0.0', '1.5.0', 'latest'])
+  })
 })
